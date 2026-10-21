@@ -20,3 +20,10 @@ keystore.properties
 
 # macOS
 .DS_Store
+
+# Local working folders (never commit)
+tools/
+tv-debloat/
+GlassLauncher/
+venv/
+adbkey*
