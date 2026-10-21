@@ -42,8 +42,10 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.fares.glass.R
 import com.fares.glass.data.AppEntry
 import com.fares.glass.data.AppRepository
 
@@ -61,7 +63,7 @@ private val MenuHeight = 196.dp
 private val MenuWidth = 260.dp
 private val DockInset = 20.dp
 private val DockTop = 18.dp
-/** Couvre la rangée et l'agrandissement au focus (pas de nom sous les icônes du dock). */
+/** Covers the row and the focus zoom (no names under dock icons). */
 private val DockHeight = Metrics.TileH + 36.dp
 
 @Composable
@@ -79,7 +81,7 @@ fun HomeScreen(
     val density = LocalDensity.current
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
-    // Fin de la saisie du mot de passe Wi-Fi : la télécommande revient à l'accueil.
+    // Wi-Fi password entry finished: the remote drives the home screen again.
     LaunchedEffect(cc.typing) { if (!cc.typing) focusRequester.requestFocus() }
     LaunchedEffect(apps.size) {
         if (apps.isNotEmpty() && state.focus > apps.lastIndex) state.focus = apps.lastIndex
@@ -118,7 +120,7 @@ fun HomeScreen(
         when (state.mode) {
             Mode.Browse -> {
                 if (dy < 0 && row == 0) {
-                    // Au-dessus du dock : les boutons en verre en haut à droite.
+                    // Above the dock: the glass buttons at the top right.
                     state.topIndex = top.lastIndex
                     state.mode = Mode.Top
                     return
@@ -135,7 +137,7 @@ fun HomeScreen(
                 state.focus = it
             }
             Mode.Menu -> state.menuIndex = (state.menuIndex + dy).coerceIn(0, menu.lastIndex)
-            Mode.Control -> Unit // géré par le Centre de contrôle
+            Mode.Control -> Unit // handled by the Control Center
         }
     }
 
@@ -143,7 +145,7 @@ fun HomeScreen(
         when (state.mode) {
             Mode.Browse -> launchFocused()
             Mode.Top -> {
-                // Les boutons du haut ouvrent le Centre de contrôle, directement sur la bonne page.
+                // The top buttons open the Control Center straight on the matching page.
                 cc.open(when (state.topIndex) { 0 -> CcPage.Wifi; 1 -> CcPage.Bluetooth; else -> CcPage.Main })
                 state.mode = Mode.Control
             }
@@ -206,7 +208,7 @@ fun HomeScreen(
                     }
                 } else {
                     state.pressed = false
-                    // Un relâchement sans appui (OK maintenu dans l'app qu'on vient de quitter) est ignoré.
+                    // A release without a press (OK held in the app we just left) is ignored.
                     if (state.centerDownAt >= 0 && !state.longFired) select()
                     state.centerDownAt = -1
                 }
@@ -236,7 +238,7 @@ fun HomeScreen(
             .focusable()
             .onPreviewKeyEvent(::onKey),
     ) {
-        // Fond : net en haut de l'accueil, flouté et assombri dès qu'on descend dans la grille.
+        // Background: sharp at the top of the home screen, blurred and dimmed once you move into the grid.
         Crossfade(wallpaper, animationSpec = tween(700), label = "wallpaper") { img ->
             if (img != null) {
                 Image(img, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, filterQuality = FilterQuality.Low)
@@ -260,7 +262,7 @@ fun HomeScreen(
         )
         Box(Modifier.fillMaxSize().graphicsLayer { alpha = blur }.background(Color.Black.copy(alpha = 0.22f)))
 
-        // Dock en verre sous la première rangée ; il s'efface quand on descend dans la grille.
+        // Glass dock under the first row; it fades out when you move into the grid.
         val dockAlpha by animateFloatAsState(if (row == 0) 1f else 0f, tween(300), label = "dock")
         val headerAlpha by animateFloatAsState(if (row == 0) 1f else 0f, tween(300), label = "header")
         if (headerAlpha > 0f) {
@@ -285,11 +287,11 @@ fun HomeScreen(
             )
         }
 
-        // Grille : seules les rangées proches de la sélection sont composées.
+        // Grid: only rows near the selection are composed.
         val visibleRows = (row - 2)..(row + 3)
         apps.forEachIndexed { i, entry ->
             if (i / Metrics.COLS in visibleRows) key(entry.pkg) {
-                // Quand une app est déplacée ou masquée, les autres glissent vers leur nouvelle place.
+                // When an app is moved or hidden, the others slide to their new place.
                 val slide = spring<Float>(dampingRatio = 0.85f, stiffness = 320f)
                 val x by animateFloatAsState(tileX(i).value, slide, label = "x")
                 val baseY by animateFloatAsState((Metrics.TopRowY + Metrics.Pitch * (i / Metrics.COLS)).value, slide, label = "y")
@@ -304,7 +306,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .offset { IntOffset(x.dp.roundToPx(), (baseY - scroll.value).dp.roundToPx()) }
                         .graphicsLayer {
-                            // Les rangées qui remontent hors champ s'effacent, comme sur tvOS.
+                            // Rows scrolling off the top fade out, as on tvOS.
                             val y = baseY - scroll.value
                             alpha = ((y + 60f) / 100f).coerceIn(0f, 1f)
                         },
@@ -318,7 +320,7 @@ fun HomeScreen(
             state.mode == Mode.Jiggle, Modifier.align(Alignment.TopCenter).padding(top = 32.dp),
             enter = fadeIn() + scaleIn(initialScale = 0.9f), exit = fadeOut() + scaleOut(targetScale = 0.9f),
         ) {
-            HintPill(backdrop, "Déplacez « ${focused?.label.orEmpty()} » avec les flèches · OK pour terminer", Modifier)
+            HintPill(backdrop, stringResource(R.string.hint_move, focused?.label.orEmpty()), Modifier)
         }
 
         AnimatedVisibility(

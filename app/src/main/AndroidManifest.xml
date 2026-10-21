@@ -4,21 +4,21 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <!-- Fond d'écran personnalisé : /sdcard/Glass/wallpaper.jpg -->
+    <!-- Custom wallpaper and fonts: /sdcard/Glass/ -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
-    <!-- Centre de contrôle : Wi-Fi et Bluetooth gérés dans Glass -->
+    <!-- Control Center: Wi-Fi and Bluetooth managed inside Glass -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Android 7 : la recherche Wi-Fi / Bluetooth exige la localisation (accordée par ADB) -->
+    <!-- Android 7: Wi-Fi / Bluetooth scanning needs location (granted over ADB) -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <!-- Vitesse des animations : `adb shell pm grant com.fares.glass android.permission.WRITE_SECURE_SETTINGS` -->
+    <!-- Animation speed: `adb shell pm grant com.fares.glass android.permission.WRITE_SECURE_SETTINGS` -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
         xmlns:tools="http://schemas.android.com/tools" tools:ignore="ProtectedPermissions" />
 
@@ -31,7 +31,7 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
-        <!-- Écrans de réglages proposés par le Centre de contrôle (selon la TV) -->
+        <!-- Settings screens offered by the Control Center (depending on the TV) -->
         <intent>
             <action android:name="android.settings.SETTINGS" />
         </intent>
@@ -80,7 +80,7 @@
     </queries>
 
     <application
-        android:label="Glass"
+        android:label="@string/app_name"
         android:icon="@drawable/ic_launcher"
         android:banner="@drawable/banner"
         android:allowBackup="false"

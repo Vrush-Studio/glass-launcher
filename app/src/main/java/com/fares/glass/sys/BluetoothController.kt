@@ -1,4 +1,4 @@
-@file:Suppress("DEPRECATION", "MissingPermission") // API Bluetooth d'Android 7 ; permissions accordées par ADB.
+@file:Suppress("DEPRECATION", "MissingPermission") // Android 7 Bluetooth API; permissions granted over ADB.
 
 package com.fares.glass.sys
 
@@ -10,21 +10,32 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.fares.glass.R
+
+enum class BtKind(@StringRes val label: Int) {
+    Audio(R.string.bt_kind_audio),
+    Remote(R.string.bt_kind_remote),
+    Gamepad(R.string.bt_kind_gamepad),
+    Phone(R.string.bt_kind_phone),
+    Computer(R.string.bt_kind_computer),
+    Other(R.string.bt_device),
+}
 
 data class BtDevice(
     val address: String,
     val name: String,
     val bonded: Boolean,
     val connected: Boolean,
-    /** Télécommande / manette : on ne propose jamais de l'oublier depuis Glass. */
+    /** Remote / controller: Glass never offers to forget it. */
     val protected: Boolean,
-    val kind: String,
+    val kind: BtKind,
 )
 
-/** État et commandes Bluetooth pour le Centre de contrôle. */
+/** Bluetooth state and commands for the Control Center. */
 class BluetoothController(context: Context) {
     private val app = context.applicationContext
     private val adapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
@@ -50,8 +61,8 @@ class BluetoothController(context: Context) {
             if (intent.action == BluetoothDevice.ACTION_BOND_STATE_CHANGED) {
                 val dev = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
                 status = when (intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1)) {
-                    BluetoothDevice.BOND_BONDING -> "Jumelage avec ${dev?.name ?: "l'appareil"}…"
-                    BluetoothDevice.BOND_BONDED -> "${dev?.name ?: "Appareil"} jumelé"
+                    BluetoothDevice.BOND_BONDING -> app.getString(R.string.bt_pairing, dev?.name ?: app.getString(R.string.bt_the_device))
+                    BluetoothDevice.BOND_BONDED -> app.getString(R.string.bt_paired, dev?.name ?: app.getString(R.string.bt_device))
                     else -> status
                 }
             }
@@ -91,11 +102,11 @@ class BluetoothController(context: Context) {
             val bondedAddresses = bonded.map { it.address }.toSet()
             found = seen.values.filter { it.address !in bondedAddresses && !it.name.isNullOrBlank() }.map { it.toBt() }
         } catch (e: SecurityException) {
-            status = "Permission Bluetooth manquante"
+            status = app.getString(R.string.bt_permission_missing)
         }
     }
 
-    /** Allume ou coupe le Bluetooth. Retourne false si le système le refuse (Android 13+). */
+    /** Turns Bluetooth on or off. Returns false if the system refuses (Android 13+). */
     fun turn(on: Boolean): Boolean {
         if (android.os.Build.VERSION.SDK_INT >= 33) return false
         val ok = runCatching { if (on) adapter?.enable() else adapter?.disable() }
@@ -111,39 +122,41 @@ class BluetoothController(context: Context) {
         val a = adapter ?: return
         seen.clear()
         found = emptyList()
-        status = if (runCatching { a.startDiscovery() }.getOrDefault(false)) "Recherche d'appareils…" else "Recherche impossible (localisation ?)"
+        status = app.getString(
+            if (runCatching { a.startDiscovery() }.getOrDefault(false)) R.string.bt_discovering else R.string.bt_discover_failed,
+        )
         refresh()
     }
 
     fun pair(address: String) {
         val dev = seen[address] ?: return
         runCatching { adapter?.cancelDiscovery() }
-        status = if (dev.createBond()) "Jumelage avec ${dev.name}…" else "Échec du jumelage avec ${dev.name}"
+        status = app.getString(if (dev.createBond()) R.string.bt_pairing else R.string.bt_pair_failed, dev.name)
     }
 
-    /** Oublie un appareil jumelé (méthode cachée removeBond, accessible sous Android 7). */
+    /** Forgets a paired device (hidden removeBond method, reachable on Android 7). */
     fun forget(address: String) {
         val dev = adapter?.bondedDevices?.firstOrNull { it.address == address } ?: return
         val ok = runCatching { dev.javaClass.getMethod("removeBond").invoke(dev) as Boolean }.getOrDefault(false)
-        status = if (ok) "${dev.name} oublié" else "Impossible d'oublier ${dev.name}"
+        status = app.getString(if (ok) R.string.bt_forgotten else R.string.bt_forget_failed, dev.name)
         refresh()
     }
 
     private fun BluetoothDevice.toBt(): BtDevice {
-        val cls = bluetoothClass
-        val major = cls?.majorDeviceClass
+        val major = bluetoothClass?.majorDeviceClass
         val label = name?.takeIf { it.isNotBlank() } ?: address
-        val remote = major == BluetoothClass.Device.Major.PERIPHERAL ||
-            label.contains("remote", ignoreCase = true) || label.contains("télécommande", ignoreCase = true)
+        // Device names are matched in English and French ("Amazon Fire TV Remote", "télécommande").
+        val namedRemote = label.contains("remote", ignoreCase = true) || label.contains("télécommande", ignoreCase = true)
         val kind = when (major) {
-            BluetoothClass.Device.Major.AUDIO_VIDEO -> "Audio"
-            BluetoothClass.Device.Major.PERIPHERAL -> if (label.contains("remote", true)) "Télécommande" else "Manette / clavier"
-            BluetoothClass.Device.Major.PHONE -> "Téléphone"
-            BluetoothClass.Device.Major.COMPUTER -> "Ordinateur"
-            else -> "Appareil"
+            BluetoothClass.Device.Major.AUDIO_VIDEO -> BtKind.Audio
+            BluetoothClass.Device.Major.PERIPHERAL -> if (namedRemote) BtKind.Remote else BtKind.Gamepad
+            BluetoothClass.Device.Major.PHONE -> BtKind.Phone
+            BluetoothClass.Device.Major.COMPUTER -> BtKind.Computer
+            else -> BtKind.Other
         }
-        // isConnected() est caché mais public sous Android 7 : on l'appelle par réflexion.
+        // isConnected() is hidden but public on Android 7: called through reflection.
         val connected = runCatching { javaClass.getMethod("isConnected").invoke(this) as Boolean }.getOrDefault(false)
-        return BtDevice(address, label, bondState == BluetoothDevice.BOND_BONDED, connected, remote, kind)
+        return BtDevice(address, label, bondState == BluetoothDevice.BOND_BONDED, connected,
+            major == BluetoothClass.Device.Major.PERIPHERAL || namedRemote, kind)
     }
 }

@@ -2,9 +2,11 @@ package com.fares.glass.ui
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.view.KeyEvent as AndroidKey
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -90,20 +92,20 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fares.glass.R
 import com.fares.glass.data.AppRepository
 import com.fares.glass.sys.BluetoothController
+import com.fares.glass.sys.BtKind
 import com.fares.glass.sys.SettingsShortcuts
 import com.fares.glass.sys.SettingsShortcuts.Section
 import com.fares.glass.sys.SystemInfo
 import com.fares.glass.sys.WifiController
 import com.fares.glass.sys.WifiNet
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 enum class CcPage { Main, Wifi, Bluetooth }
 
-/** Feuille étroite et haute, comme le Centre de contrôle de tvOS. */
+/** Narrow, tall sheet, like the tvOS Control Center. */
 val PanelWidth = 300.dp
 val PanelHeight = 516.dp
 
@@ -114,10 +116,10 @@ private val Green = Color(0xFF30D158)
 private val Orange = Color(0xFFFF9F0A)
 private val Purple = Color(0xFFBF5AF2)
 
-/** Une ligne de page de détail (Wi-Fi, Bluetooth). */
+/** One row of a detail page (Wi-Fi, Bluetooth). */
 private sealed interface Line {
     val focusable: Boolean get() = true
-    /** Identité stable : le focus suit l'élément même si la liste change (appareil découvert, scan…). */
+    /** Stable identity: focus follows the item even when the list changes (device found, scan…). */
     val key: String
     data class Toggle(val title: String, val on: Boolean) : Line { override val key get() = "toggle" }
     data class Header(val title: String) : Line { override val focusable get() = false; override val key get() = "header:$title" }
@@ -143,39 +145,42 @@ private val Section.icon: ImageVector
     }
 
 /**
- * Centre de contrôle façon tvOS : grille de modules, module Système, raccourcis ronds, et pages
- * Wi-Fi / Bluetooth qui glissent à l'intérieur du panneau. Toute la navigation à la télécommande est ici.
+ * tvOS-style Control Center: a grid of modules, a System module, round shortcuts, and Wi-Fi /
+ * Bluetooth pages that slide inside the panel. All remote navigation for it lives here.
  */
 class ControlCenter(
+    private val context: Context,
     private val repo: AppRepository,
     val wifi: WifiController,
     val bt: BluetoothController,
     val sys: SystemInfo,
     private val settings: SettingsShortcuts,
     private val onOpen: (Intent) -> Unit,
-    /** Demande à l'utilisateur les permissions d'exécution manquantes (localisation, Bluetooth récents). */
+    /** Asks the user for missing runtime permissions (location, and Bluetooth on recent Android). */
     private val onRequestPermissions: (Array<String>) -> Unit,
     private val onNextWallpaper: () -> Unit,
     private val onClose: () -> Unit,
 ) {
     var page by mutableStateOf(CcPage.Main)
     var index by mutableIntStateOf(0)
-    /** Élément sélectionné dans une page de détail, repéré par sa clé. */
+    /** Selected item on a detail page, identified by its key. */
     var rowKey by mutableStateOf("toggle")
-    /** Réseau pour lequel on saisit un mot de passe (le clavier Fire TV est alors ouvert). */
+    /** Network whose password is being typed (the on-screen keyboard is open). */
     var passwordFor by mutableStateOf<WifiNet?>(null)
     var password by mutableStateOf("")
     private var forgetArmed: String? = null
-    /** Incrémenté pour relire mémoire / stockage / animations. */
+    /** Bumped to re-read memory, storage and animations. */
     var tick by mutableIntStateOf(0)
 
     val typing get() = passwordFor != null
 
-    /** Raccourcis ronds : sections réellement accessibles sur cette TV (au plus 4) + « Tous les réglages ». */
+    /** Round shortcuts: sections this TV really lets Glass open (up to 4), plus "All settings". */
     private val shortcuts: List<Section> by lazy {
         listOf(Section.Display, Section.Devices, Section.Apps, Section.Accessibility, Section.About)
             .filter(settings::available).take(4) + Section.All
     }
+
+    private fun str(@StringRes id: Int, vararg args: Any): String = context.getString(id, *args)
 
     private fun open(section: Section) {
         val intent = settings.intent(section) ?: settings.intent(Section.All) ?: return
@@ -193,7 +198,7 @@ class ControlCenter(
         if (wanted.isNotEmpty()) onRequestPermissions(wanted.toTypedArray())
     }
 
-    /** Après la réponse de l'utilisateur aux demandes de permission. */
+    /** After the user answers the permission requests. */
     fun onPermissionsResult() {
         wifi.refresh()
         wifi.scan()
@@ -216,26 +221,33 @@ class ControlCenter(
         onClose()
     }
 
-    // ---- Page principale ----
+    // ---- Main page ----
 
     private fun tiles(wallpaperName: String): List<Tile> {
         @Suppress("UNUSED_EXPRESSION") tick
         val anim = sys.animationScale()
         return listOf(
             Tile(if (wifi.enabled) Icons.Rounded.Wifi else Icons.Rounded.WifiOff, "Wi-Fi",
-                if (!wifi.enabled) "Désactivé" else wifi.current ?: "Non connecté", wifi.enabled && wifi.current != null, WifiBlue),
+                if (!wifi.enabled) str(R.string.cc_off) else wifi.current ?: str(R.string.cc_not_connected), wifi.enabled && wifi.current != null, WifiBlue),
             Tile(if (bt.enabled) Icons.Rounded.Bluetooth else Icons.Rounded.BluetoothDisabled, "Bluetooth",
                 when {
-                    !bt.available -> "Indisponible"
-                    !bt.enabled -> "Désactivé"
-                    else -> bt.paired.count { it.connected }.let { if (it == 0) "Aucun appareil" else "$it connecté${if (it > 1) "s" else ""}" }
+                    !bt.available -> str(R.string.cc_unavailable)
+                    !bt.enabled -> str(R.string.cc_off)
+                    else -> bt.paired.count { it.connected }.let {
+                        if (it == 0) str(R.string.cc_no_devices) else context.resources.getQuantityString(R.plurals.cc_connected_count, it, it)
+                    }
                 }, bt.enabled, WifiBlue),
-            Tile(Icons.Rounded.Animation, "Animations",
-                if (!sys.canWriteSettings()) "Activer via ADB" else when (anim) { 1f -> "Normales"; 0f -> "Coupées"; else -> "Rapides ×${anim}".replace('.', ',') },
+            Tile(Icons.Rounded.Animation, str(R.string.cc_animations),
+                if (!sys.canWriteSettings()) str(R.string.cc_anim_adb) else when (anim) {
+                    1f -> str(R.string.cc_anim_normal)
+                    0f -> str(R.string.cc_anim_off)
+                    else -> str(R.string.cc_anim_fast, anim)
+                },
                 anim < 1f, Orange),
-            Tile(Icons.Rounded.Wallpaper, "Fond d'écran", wallpaperName, false, Purple),
-            Tile(Icons.Rounded.ViewCarousel, "Top Shelf", if (repo.topShelf) "Couleurs de l'app" else "Fond d'écran", repo.topShelf, Purple),
-            Tile(Icons.Rounded.Visibility, "Apps masquées", if (repo.hiddenCount == 0) "Aucune" else "${repo.hiddenCount} · OK pour réafficher",
+            Tile(Icons.Rounded.Wallpaper, str(R.string.cc_wallpaper), wallpaperName, false, Purple),
+            Tile(Icons.Rounded.ViewCarousel, "Top Shelf", str(if (repo.topShelf) R.string.cc_top_shelf_app else R.string.cc_wallpaper), repo.topShelf, Purple),
+            Tile(Icons.Rounded.Visibility, str(R.string.cc_hidden_apps),
+                if (repo.hiddenCount == 0) str(R.string.cc_hidden_none) else str(R.string.cc_hidden_count, repo.hiddenCount),
                 repo.hiddenCount > 0, Green),
         )
     }
@@ -277,51 +289,51 @@ class ControlCenter(
         }
     }
 
-    // ---- Pages de détail ----
+    // ---- Detail pages ----
 
     private fun rows(): List<Line> = when (page) {
         CcPage.Main -> emptyList()
         CcPage.Wifi -> buildList {
             add(Line.Toggle("Wi-Fi", wifi.enabled))
             if (wifi.enabled) {
-                add(Line.Header("Réseaux"))
+                add(Line.Header(str(R.string.wifi_networks)))
                 wifi.networks.forEach { add(Line.Network(it)) }
-                if (wifi.networks.isEmpty()) add(Line.Note("Recherche des réseaux…"))
-                add(Line.Action("Rechercher à nouveau", Icons.Rounded.Search))
+                if (wifi.networks.isEmpty()) add(Line.Note(str(R.string.wifi_searching)))
+                add(Line.Action(str(R.string.wifi_rescan), Icons.Rounded.Search))
             }
             wifi.status?.let { add(Line.Note(it)) }
-            if (settings.available(Section.Network)) add(Line.Link("Réglages réseau du système", Section.Network))
+            if (settings.available(Section.Network)) add(Line.Link(str(R.string.wifi_system_settings), Section.Network))
         }
         CcPage.Bluetooth -> buildList {
             add(Line.Toggle("Bluetooth", bt.enabled))
             if (bt.enabled) {
-                add(Line.Header("Mes appareils"))
+                add(Line.Header(str(R.string.bt_my_devices)))
                 bt.paired.forEach {
-                    add(Line.Device(it.address, it.name, if (it.connected) "Connecté · ${it.kind}" else "Non connecté · ${it.kind}",
+                    add(Line.Device(it.address, it.name, str(if (it.connected) R.string.bt_connected_kind else R.string.bt_not_connected_kind, str(it.kind.label)),
                         iconFor(it.kind), true, it.connected))
                 }
-                if (bt.paired.isEmpty()) add(Line.Note("Aucun appareil jumelé"))
-                add(Line.Header("Autres appareils"))
-                bt.found.forEach { add(Line.Device(it.address, it.name, "OK pour jumeler · ${it.kind}", iconFor(it.kind), false, false)) }
-                add(Line.Action(if (bt.discovering) "Recherche en cours…" else "Rechercher des appareils", Icons.Rounded.Search))
+                if (bt.paired.isEmpty()) add(Line.Note(str(R.string.bt_none_paired)))
+                add(Line.Header(str(R.string.bt_other_devices)))
+                bt.found.forEach { add(Line.Device(it.address, it.name, str(R.string.bt_ok_to_pair, str(it.kind.label)), iconFor(it.kind), false, false)) }
+                add(Line.Action(str(if (bt.discovering) R.string.bt_searching else R.string.bt_search), Icons.Rounded.Search))
             }
             bt.status?.let { add(Line.Note(it)) }
-            if (settings.available(Section.Devices)) add(Line.Link("Appareils dans les réglages du système", Section.Devices))
+            if (settings.available(Section.Devices)) add(Line.Link(str(R.string.bt_system_settings), Section.Devices))
         }
     }
 
-    private fun iconFor(kind: String) = when (kind) {
-        "Audio" -> Icons.Rounded.Headphones
-        "Télécommande" -> Icons.Rounded.SettingsRemote
-        "Manette / clavier" -> Icons.Rounded.SportsEsports
-        "Téléphone" -> Icons.Rounded.Smartphone
-        "Ordinateur" -> Icons.Rounded.Computer
-        else -> Icons.Rounded.Devices
+    private fun iconFor(kind: BtKind) = when (kind) {
+        BtKind.Audio -> Icons.Rounded.Headphones
+        BtKind.Remote -> Icons.Rounded.SettingsRemote
+        BtKind.Gamepad -> Icons.Rounded.SportsEsports
+        BtKind.Phone -> Icons.Rounded.Smartphone
+        BtKind.Computer -> Icons.Rounded.Computer
+        BtKind.Other -> Icons.Rounded.Devices
     }
 
     private fun focusableRows(list: List<Line>) = list.indices.filter { list[it].focusable }
 
-    /** Index de l'élément sélectionné ; s'il a disparu de la liste, le premier élément sélectionnable. */
+    /** Index of the selected item; if it has left the list, the first selectable one. */
     private fun rowIndex(list: List<Line>): Int =
         list.indexOfFirst { it.key == rowKey }.takeIf { it >= 0 } ?: focusableRows(list).firstOrNull() ?: 0
 
@@ -338,10 +350,10 @@ class ControlCenter(
         val r = list.getOrNull(rowIndex(list)) ?: return
         when (r) {
             is Line.Toggle -> if (page == CcPage.Wifi) {
-                // Android 10+ interdit aux apps d'allumer/couper le Wi-Fi : on ouvre l'écran du système.
+                // Android 10+ doesn't let apps turn Wi-Fi on or off: open the system screen.
                 if (!wifi.turn(!r.on)) open(Section.Network)
             } else {
-                // Android 13+ : allumage via la fenêtre standard du système, extinction dans les réglages.
+                // Android 13+: turn on through the standard system dialog, turn off in Settings.
                 if (!bt.turn(!r.on)) {
                     if (!r.on) onOpen(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     else open(Section.Devices)
@@ -349,16 +361,16 @@ class ControlCenter(
             }
             is Line.Network -> when {
                 r.net.connected -> Unit
-                !wifi.canConnect -> open(Section.Network) // Android 10+ : connexion par l'écran du système
+                !wifi.canConnect -> open(Section.Network) // Android 10+: connect from the system screen
                 wifi.needsPassword(r.net) -> { password = ""; passwordFor = r.net }
                 else -> wifi.connect(r.net)
             }
             is Line.Device -> when {
                 !r.bonded -> bt.pair(r.address)
                 bt.paired.firstOrNull { it.address == r.address }?.protected == true ->
-                    bt.status = "La télécommande et les manettes se gèrent dans les réglages Amazon"
+                    bt.status = str(R.string.bt_protected)
                 forgetArmed == r.address -> { forgetArmed = null; bt.forget(r.address) }
-                else -> { forgetArmed = r.address; bt.status = "OK à nouveau pour oublier ${r.name}" }
+                else -> { forgetArmed = r.address; bt.status = str(R.string.bt_forget_confirm, r.name) }
             }
             is Line.Action -> if (page == CcPage.Wifi) wifi.scan() else bt.discover()
             is Line.Link -> open(r.section)
@@ -378,14 +390,14 @@ class ControlCenter(
         password = ""
     }
 
-    /** Touches quand le Centre de contrôle est ouvert. Retourne true si la touche est consommée. */
+    /** Keys while the Control Center is open. Returns true if the key is consumed. */
     fun onKey(e: AndroidKey): Boolean {
         if (typing) {
             if (e.keyCode == AndroidKey.KEYCODE_BACK) {
                 if (e.action == AndroidKey.ACTION_UP) cancelPassword()
                 return true
             }
-            return false // le champ de texte et le clavier Fire TV gèrent le reste
+            return false // the text field and the on-screen keyboard handle the rest
         }
         if (e.action != AndroidKey.ACTION_DOWN) return true
         val (dx, dy) = when (e.keyCode) {
@@ -410,7 +422,7 @@ class ControlCenter(
         return true
     }
 
-    // ---- Rendu ----
+    // ---- Rendering ----
 
     @Composable
     fun Panel(backdrop: Backdrop, wallpaperName: String, modifier: Modifier) {
@@ -433,12 +445,7 @@ class ControlCenter(
 
     @Composable
     private fun MainPage(wallpaperName: String) {
-        val now = rememberNow()
-        val minute = now / 60000
-        val time = remember(minute) { SimpleDateFormat("HH:mm", Locale.FRANCE).format(Date(now)) }
-        val date = remember(minute) {
-            SimpleDateFormat("EEEE d MMMM", Locale.FRANCE).format(Date(now)).replaceFirstChar { it.titlecase(Locale.FRANCE) }
-        }
+        val (time, date) = rememberClock(rememberNow())
         val tiles = tiles(wallpaperName)
         Column(Modifier.fillMaxSize()) {
             BasicText(time, style = txt(White, 34.sp, FontWeight.Bold))
@@ -460,7 +467,7 @@ class ControlCenter(
             }
             Spacer(Modifier.height(8.dp))
             BasicText(
-                if (index >= 7) shortcuts[index - 7].title else " ",
+                if (index >= 7) str(shortcuts[index - 7].title) else " ",
                 Modifier.fillMaxWidth(),
                 style = txt(White.copy(alpha = 0.85f), 13.sp, FontWeight.SemiBold).copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center),
             )
@@ -513,14 +520,14 @@ class ControlCenter(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                BasicText("Système", style = txt(fg, 13.sp, FontWeight.SemiBold))
+                BasicText(str(R.string.cc_system), style = txt(fg, 13.sp, FontWeight.SemiBold))
                 Spacer(Modifier.weight(1f))
                 BasicText(wifi.ip ?: "", style = txt(fg.copy(alpha = 0.6f), 11.sp, FontWeight.Medium), maxLines = 1)
             }
             Spacer(Modifier.height(6.dp))
-            UsageBar("Mémoire", mem, fg, f)
+            UsageBar(str(R.string.cc_memory), mem, fg, f)
             Spacer(Modifier.height(4.dp))
-            UsageBar("Stockage", disk, fg, f)
+            UsageBar(str(R.string.cc_storage), disk, fg, f)
         }
     }
 
@@ -563,7 +570,7 @@ class ControlCenter(
                 BasicText(if (p == CcPage.Wifi) "Wi-Fi" else "Bluetooth", style = txt(White, 24.sp, FontWeight.Bold))
             }
             Spacer(Modifier.height(12.dp))
-            // Fenêtre glissante : la ligne sélectionnée reste visible.
+            // Sliding window: the selected row stays visible.
             val window = 10
             val current = rowIndex(list)
             val start = (current - 3).coerceIn(0, (list.size - window).coerceAtLeast(0))
@@ -574,7 +581,7 @@ class ControlCenter(
     @Composable
     private fun DetailRow(r: Line, focused: Boolean) {
         when (r) {
-            is Line.Header -> BasicText(r.title.uppercase(Locale.FRANCE), Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp),
+            is Line.Header -> BasicText(r.title.uppercase(Locale.getDefault()), Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp),
                 style = txt(White.copy(alpha = 0.55f), 11.sp, FontWeight.SemiBold))
             is Line.Note -> BasicText(r.text, Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                 style = txt(White.copy(alpha = 0.6f), 12.sp, FontWeight.Medium), maxLines = 2)
@@ -601,8 +608,8 @@ class ControlCenter(
                             Column(Modifier.weight(1f)) {
                                 BasicText(r.net.ssid, style = txt(fg, 14.sp, FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 val sub = when {
-                                    r.net.connected -> "Connecté${wifi.ip?.let { " · $it" } ?: ""}"
-                                    r.net.saved -> "Enregistré"
+                                    r.net.connected -> wifi.ip?.let { str(R.string.wifi_connected_ip, it) } ?: str(R.string.wifi_connected)
+                                    r.net.saved -> str(R.string.wifi_saved)
                                     else -> null
                                 }
                                 sub?.let { BasicText(it, style = txt(fg.copy(alpha = 0.6f), 11.sp, FontWeight.Medium)) }
@@ -662,7 +669,7 @@ class ControlCenter(
         }
     }
 
-    /** Saisie du mot de passe Wi-Fi, au centre de l'écran (à placer à la racine). */
+    /** Wi-Fi password entry, centered on screen (place it at the root). */
     @Composable
     fun PasswordLayer(backdrop: Backdrop, onTypingDone: () -> Unit) {
         val net = passwordFor ?: return
@@ -675,8 +682,8 @@ class ControlCenter(
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
             Glass(backdrop, Modifier.width(440.dp), RoundedCornerShape(32.dp), tint = White.copy(alpha = 0.10f)) {
                 Column(Modifier.padding(24.dp)) {
-                    BasicText("Mot de passe", style = txt(White, 22.sp, FontWeight.Bold))
-                    BasicText("pour « ${net.ssid} »", style = txt(White.copy(alpha = 0.7f), 14.sp, FontWeight.Medium))
+                    BasicText(str(R.string.wifi_password), style = txt(White, 22.sp, FontWeight.Bold))
+                    BasicText(str(R.string.wifi_password_for, net.ssid), style = txt(White.copy(alpha = 0.7f), 14.sp, FontWeight.Medium))
                     Spacer(Modifier.height(16.dp))
                     BasicTextField(
                         value = password,
@@ -698,7 +705,7 @@ class ControlCenter(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                     )
                     Spacer(Modifier.height(10.dp))
-                    BasicText("Validez sur le clavier pour vous connecter · Retour pour annuler",
+                    BasicText(str(R.string.wifi_password_hint),
                         style = txt(White.copy(alpha = 0.6f), 12.sp, FontWeight.Medium))
                 }
             }

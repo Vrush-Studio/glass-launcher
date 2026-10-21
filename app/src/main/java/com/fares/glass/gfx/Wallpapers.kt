@@ -14,28 +14,30 @@ import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.os.Environment
+import androidx.annotation.StringRes
+import com.fares.glass.R
 import java.io.File
 import kotlin.random.Random
 
 /**
- * Fonds d'écran abstraits générés à la volée (pas d'images d'Apple embarquées) : des nappes de
- * couleur et des rubans lumineux aux bords nets, pour que le verre ait quelque chose à flouter.
+ * Abstract wallpapers generated on the fly (no Apple images bundled): pools of color and
+ * sharp-edged light ribbons, so the glass has something to blur.
  */
 object Wallpapers {
 
-    private class Preset(val name: String, val base: Int, val blobs: IntArray, val ribbons: IntArray)
+    private class Preset(@StringRes val name: Int, val base: Int, val blobs: IntArray, val ribbons: IntArray)
 
     private val presets = listOf(
-        Preset("Liquide", 0xFF070B1E.toInt(),
+        Preset(R.string.wallpaper_liquid, 0xFF070B1E.toInt(),
             intArrayOf(0xFF3D2BE0.toInt(), 0xFFB0309A.toInt(), 0xFF0E9FB8.toInt(), 0xFF1B3FA8.toInt(), 0xFFFF7A45.toInt()),
             intArrayOf(0xFFFFFFFF.toInt(), 0xFF9AD8FF.toInt(), 0xFFFFB3E6.toInt())),
-        Preset("Aurore", 0xFF03140F.toInt(),
+        Preset(R.string.wallpaper_aurora, 0xFF03140F.toInt(),
             intArrayOf(0xFF12B886.toInt(), 0xFF0B7285.toInt(), 0xFF6741D9.toInt(), 0xFF0B3D2E.toInt(), 0xFF63E6BE.toInt()),
             intArrayOf(0xFFB2F2BB.toInt(), 0xFFFFFFFF.toInt(), 0xFFD0BFFF.toInt())),
-        Preset("Crépuscule", 0xFF1A0B12.toInt(),
+        Preset(R.string.wallpaper_dusk, 0xFF1A0B12.toInt(),
             intArrayOf(0xFFFF6B35.toInt(), 0xFFD6336C.toInt(), 0xFF5F3DC4.toInt(), 0xFFFFC078.toInt(), 0xFF862E9C.toInt()),
             intArrayOf(0xFFFFE8CC.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFC9C9.toInt())),
-        Preset("Graphite", 0xFF0B0C0F.toInt(),
+        Preset(R.string.wallpaper_graphite, 0xFF0B0C0F.toInt(),
             intArrayOf(0xFF2B2F38.toInt(), 0xFF3B4252.toInt(), 0xFF1F2A44.toInt(), 0xFF4C566A.toInt(), 0xFF2E3440.toInt()),
             intArrayOf(0xFFFFFFFF.toInt(), 0xFFAFC4E8.toInt(), 0xFFFFFFFF.toInt())),
     )
@@ -49,7 +51,7 @@ object Wallpapers {
     fun count(context: Context) = presets.size + if (hasCustom(context)) 1 else 0
 
     fun name(context: Context, index: Int): String =
-        if (index >= presets.size && hasCustom(context)) "Photo" else presets[index % presets.size].name
+        context.getString(if (index >= presets.size && hasCustom(context)) R.string.wallpaper_photo else presets[index % presets.size].name)
 
     fun load(context: Context, index: Int): Bitmap {
         if (index >= presets.size && hasCustom(context)) {
@@ -70,7 +72,7 @@ object Wallpapers {
         val rnd = Random(seed * 7919 + 17)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        // Nappes de couleur.
+        // Color pools.
         val spots = arrayOf(0.18f to 0.22f, 0.86f to 0.16f, 0.66f to 0.88f, 0.08f to 0.92f, 0.94f to 0.70f)
         p.blobs.forEachIndexed { i, color ->
             val (fx, fy) = spots[i]
@@ -82,7 +84,7 @@ object Wallpapers {
             c.drawCircle(cx, cy, radius, paint)
         }
 
-        // Rubans lumineux : des courbes aux bords nets qui révèlent le flou du verre.
+        // Light ribbons: sharp-edged curves that show off the glass blur.
         paint.style = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.ROUND
         p.ribbons.forEachIndexed { i, color ->
@@ -99,7 +101,7 @@ object Wallpapers {
                 floatArrayOf(0f, 0.35f, 0.75f, 1f), Shader.TileMode.CLAMP)
             paint.maskFilter = BlurMaskFilter(6f + i * 10f, BlurMaskFilter.Blur.NORMAL)
             c.drawPath(path, paint)
-            // Liseré fin et brillant au cœur du ruban.
+            // Thin bright line along the ribbon's core.
             paint.strokeWidth = 2.5f
             paint.maskFilter = null
             paint.shader = LinearGradient(0f, 0f, w.toFloat(), 0f,
@@ -108,7 +110,7 @@ object Wallpapers {
             c.drawPath(path, paint)
         }
 
-        // Léger grain pour casser les aplats (évite les bandes de dégradé en 8 bits).
+        // Light grain to break up flat areas (avoids 8-bit gradient banding).
         val px = IntArray(w * h)
         bmp.getPixels(px, 0, w, 0, 0, w, h)
         val noise = Random(seed)

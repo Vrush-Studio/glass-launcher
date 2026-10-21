@@ -52,8 +52,8 @@ private val labelStyle get() = TextStyle(
 )
 
 /**
- * Icône d'app façon tvOS : au focus elle grossit avec un ressort, se soulève (ombre), s'incline en
- * 3D dans le sens du déplacement puis revient en oscillant, et un reflet glisse sur sa surface.
+ * tvOS-style app icon: when focused it springs larger, lifts (shadow), tilts in 3D toward the move
+ * direction and wobbles back, while a sheen slides across its surface.
  */
 @Composable
 fun AppTile(
@@ -62,7 +62,7 @@ fun AppTile(
     focused: Boolean,
     pressed: Boolean,
     jiggling: Boolean,
-    /** Nom sous l'icône au focus ; pas dans le dock (première rangée). */
+    /** Name under the icon when focused; not in the dock (first row). */
     showLabel: Boolean,
     nudge: Nudge,
     modifier: Modifier,
@@ -128,7 +128,7 @@ fun AppTile(
                             drawRect(Color.White.copy(alpha = 0.12f))
                         }
                         if (lift > 0f) {
-                            // Le reflet suit l'inclinaison, comme la lumière sur une icône tvOS.
+                            // The sheen follows the tilt, like light on a tvOS icon.
                             val shift = tiltY.value / 16f
                             val sheen = Brush.linearGradient(
                                 0f to Color.Transparent,

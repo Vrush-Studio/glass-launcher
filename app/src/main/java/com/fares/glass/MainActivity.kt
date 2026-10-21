@@ -62,13 +62,13 @@ class MainActivity : ComponentActivity() {
         Typo.load(this)
         intent.getStringExtra("name")?.let(repo::setName)
         cc = ControlCenter(
-            repo, WifiController(this), BluetoothController(this), SystemInfo(this), SettingsShortcuts(this),
+            this, repo, WifiController(this), BluetoothController(this), SystemInfo(this), SettingsShortcuts(this),
             onOpen = ::startSafely,
             onRequestPermissions = { permissions.launch(it) },
             onNextWallpaper = { run(Command.NextWallpaper) },
             onClose = { home.mode = Mode.Browse },
         )
-        // Un écran d'accueil ne se ferme jamais avec Retour.
+        // A home screen never closes on Back.
         onBackPressedDispatcher.addCallback(this) {}
         registerReceiver(packages, IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -112,7 +112,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val (sharp, frosted) = withContext(Dispatchers.Default) {
                 val src = Wallpapers.load(this@MainActivity, index)
-                // ~480 px de large et sigma 10 : l'équivalent d'un flou de 40 px en 1080p, très bon marché.
+                // ~480 px wide with sigma 10: like a 40 px blur at 1080p, and very cheap.
                 src to Blur.frosted(src, 480, 10f, 1.45f, 1.0f)
             }
             wallpaper.value = sharp.asImageBitmap()
@@ -126,7 +126,7 @@ class MainActivity : ComponentActivity() {
         try {
             startActivity(entry.launchIntent(), options.toBundle())
         } catch (e: Exception) {
-            Log.w("Glass", "Impossible de lancer ${entry.pkg}", e)
+            Log.w("Glass", "Can't launch ${entry.pkg}", e)
             packageManager.getLaunchIntentForPackage(entry.pkg)?.let { startSafely(it) }
         }
     }
@@ -151,7 +151,7 @@ class MainActivity : ComponentActivity() {
         try {
             startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: Exception) {
-            Log.w("Glass", "Activité introuvable : $intent", e)
+            Log.w("Glass", "No activity for $intent", e)
             if (intent.action != Settings.ACTION_SETTINGS) startSafely(Intent(Settings.ACTION_SETTINGS))
         }
     }

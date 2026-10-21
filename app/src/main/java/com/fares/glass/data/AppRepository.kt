@@ -22,7 +22,7 @@ data class AppEntry(val pkg: String, val activity: String, val label: String, va
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
 }
 
-/** Apps installées, leur ordre (comme sur tvOS, l'utilisateur les déplace), les apps masquées et les réglages. */
+/** Installed apps, their order (users rearrange them, as on tvOS), hidden apps and settings. */
 class AppRepository(context: Context) {
     private val app = context.applicationContext
     private val pm = app.packageManager
@@ -40,7 +40,7 @@ class AppRepository(context: Context) {
         private set
     var topShelf by mutableStateOf(prefs.getBoolean("topShelf", false))
         private set
-    /** Prénom de la salutation (« Bonjour Farès ») : `am start -n com.fares.glass/.MainActivity --es name Farès`. */
+    /** First name in the greeting ("Good morning, Alex"): `am start -n com.fares.glass/.MainActivity --es name Alex`. */
     var userName by mutableStateOf(prefs.getString("name", "").orEmpty())
         private set
 
@@ -58,7 +58,7 @@ class AppRepository(context: Context) {
                 try {
                     tiles.build(entry)
                 } catch (e: Exception) {
-                    Log.w("Glass", "Tuile impossible pour ${entry.pkg}", e)
+                    Log.w("Glass", "Can't build tile for ${entry.pkg}", e)
                     null
                 }
             } ?: continue
@@ -66,7 +66,7 @@ class AppRepository(context: Context) {
         }
     }
 
-    /** Une app mise à jour peut avoir changé de bannière. */
+    /** An updated app may have a new banner. */
     fun invalidate(pkg: String) {
         visuals.remove(pkg)
     }
@@ -88,7 +88,7 @@ class AppRepository(context: Context) {
     private fun publish() {
         val rank = prefs.getString("order", "").orEmpty().split('|').withIndex().associate { it.value to it.index }
         val hidden = hidden()
-        // Ordre choisi d'abord ; les nouvelles apps arrivent à la fin, apps TV avant apps mobiles.
+        // User order first; new apps go at the end, TV apps before mobile apps.
         apps = installed
             .sortedWith(compareBy<AppEntry>({ rank[it.pkg] ?: Int.MAX_VALUE }, { !it.isTv }, { it.label.lowercase() }))
             .filter { it.pkg !in hidden }

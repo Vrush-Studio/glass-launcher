@@ -9,11 +9,11 @@ android {
 
     defaultConfig {
         applicationId = "com.fares.glass"
-        // Fire TV Stick 4K 1re gén. : Fire OS 6 = Android 7.1 (API 25).
+        // Fire TV Stick 4K (1st gen): Fire OS 6 = Android 7.1 (API 25).
         minSdk = 25
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
 
     buildTypes {

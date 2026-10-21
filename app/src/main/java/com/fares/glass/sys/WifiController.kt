@@ -1,4 +1,4 @@
-@file:Suppress("DEPRECATION") // API Wi-Fi d'Android 7 : c'est celle de la Fire TV.
+@file:Suppress("DEPRECATION") // Android 7 Wi-Fi API: the one the Fire TV runs.
 
 package com.fares.glass.sys
 
@@ -13,10 +13,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.fares.glass.R
 
 data class WifiNet(val ssid: String, val level: Int, val secure: Boolean, val saved: Boolean, val connected: Boolean)
 
-/** État et commandes Wi-Fi pour le Centre de contrôle (permissions Wi-Fi + localisation pour le scan). */
+/** Wi-Fi state and commands for the Control Center (Wi-Fi permissions, plus location for scanning). */
 class WifiController(context: Context) {
     private val app = context.applicationContext
     private val wm = app.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -31,7 +32,7 @@ class WifiController(context: Context) {
         private set
     var networks by mutableStateOf<List<WifiNet>>(emptyList())
         private set
-    /** Message affiché sous la liste (connexion en cours, échec, scan impossible…). */
+    /** Message shown under the list (connecting, failure, scan unavailable…). */
     var status by mutableStateOf<String?>(null)
 
     private var listening = false
@@ -69,12 +70,12 @@ class WifiController(context: Context) {
         current = ssid
         ip = info?.ipAddress?.takeIf { it != 0 }?.let { "${it and 0xFF}.${it shr 8 and 0xFF}.${it shr 16 and 0xFF}.${it shr 24 and 0xFF}" }
         level = if (ssid != null) WifiManager.calculateSignalLevel(info.rssi, 5) else 0
-        if (ssid != null && status == "Connexion à $ssid…") status = null
+        if (ssid != null && status == app.getString(R.string.wifi_connecting, ssid)) status = null
         val saved = runCatching { wm.configuredNetworks.orEmpty().mapNotNull { it.SSID?.trim('"') }.toSet() }.getOrDefault(emptySet())
         val results = try {
             wm.scanResults.orEmpty()
         } catch (e: SecurityException) {
-            status = "Recherche impossible : permission de localisation manquante"
+            status = app.getString(R.string.wifi_scan_no_location)
             emptyList()
         }
         networks = results
@@ -93,10 +94,10 @@ class WifiController(context: Context) {
             .sortedWith(compareByDescending<WifiNet> { it.connected }.thenByDescending { it.saved }.thenByDescending { it.level })
     }
 
-    /** Android 10+ : une app ne peut plus allumer/couper le Wi-Fi ni enregistrer de réseau elle-même. */
+    /** Android 10+: apps can no longer turn Wi-Fi on or off, or save networks themselves. */
     val canConnect get() = android.os.Build.VERSION.SDK_INT < 29
 
-    /** Allume ou coupe le Wi-Fi. Retourne false si le système le refuse (Android 10+). */
+    /** Turns Wi-Fi on or off. Returns false if the system refuses (Android 10+). */
     fun turn(on: Boolean): Boolean {
         if (!canConnect) return false
         val ok = runCatching { wm.setWifiEnabled(on) }.onFailure { Log.w("Glass", "Wi-Fi", it) }.getOrDefault(false)
@@ -107,11 +108,11 @@ class WifiController(context: Context) {
         return ok
     }
 
-    /** Réseau enregistré ou ouvert : connexion directe. Sinon il faut un mot de passe. */
+    /** Saved or open network: connect directly. Otherwise a password is needed. */
     fun needsPassword(net: WifiNet) = net.secure && !net.saved
 
     fun connect(net: WifiNet, password: String? = null) {
-        status = "Connexion à ${net.ssid}…"
+        status = app.getString(R.string.wifi_connecting, net.ssid)
         val quoted = "\"${net.ssid}\""
         val existing = runCatching { wm.configuredNetworks.orEmpty().firstOrNull { it.SSID == quoted } }.getOrNull()
         val id = if (existing != null && password == null) {
@@ -128,10 +129,10 @@ class WifiController(context: Context) {
             })
         }
         if (id == -1) {
-            status = "Impossible d'enregistrer ce réseau"
+            status = app.getString(R.string.wifi_save_failed)
             return
         }
         val ok = wm.enableNetwork(id, true) && wm.reconnect()
-        status = if (ok) "Connexion à ${net.ssid}…" else "Échec de la connexion à ${net.ssid}"
+        status = app.getString(if (ok) R.string.wifi_connecting else R.string.wifi_connect_failed, net.ssid)
     }
 }

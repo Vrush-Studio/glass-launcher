@@ -27,16 +27,16 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
-/** Ce qui se trouve derrière le verre : le fond d'écran déjà flouté, et la taille de l'écran. */
+/** What sits behind the glass: the pre-blurred wallpaper and the screen size. */
 class Backdrop {
     var frosted by mutableStateOf<ImageBitmap?>(null)
     var screen by mutableStateOf(IntSize.Zero)
 }
 
 /**
- * Matériau « Liquid Glass ». Le fond est fixe, donc au lieu de flouter en temps réel (impossible
- * avant Android 12), on dessine la portion exacte du fond pré-flouté qui se trouve sous le panneau,
- * puis une teinte, un reflet spéculaire en haut, une lueur intérieure et un liseré lumineux.
+ * "Liquid Glass" material. The background is static, so instead of blurring in real time (impossible
+ * before Android 12) it draws the exact part of the pre-blurred background under the panel, then a
+ * tint, a specular highlight at the top, an inner glow and a bright rim.
  */
 @Composable
 fun Glass(
@@ -44,7 +44,7 @@ fun Glass(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(30.dp),
     tint: Color = Color.White.copy(alpha = 0.07f),
-    /** Fond flouté à échantillonner, s'il diffère du fond d'écran (ambiance du Top Shelf). */
+    /** Blurred image to sample when it isn't the wallpaper (Top Shelf ambience). */
     source: ImageBitmap? = null,
     content: @Composable BoxScope.() -> Unit = {},
 ) {

@@ -10,9 +10,9 @@ import androidx.compose.ui.text.font.FontWeight
 import java.io.File
 
 /**
- * Police de toute l'interface. Par défaut Inter (licence OFL, conçue comme pendant libre de SF Pro).
- * Si l'utilisateur place ses propres fichiers dans /sdcard/Glass/fonts/ (Regular, Medium, Semibold, Bold
- * en .ttf ou .otf), Glass les utilise à la place.
+ * Font for the whole UI. Inter by default (OFL license, a free counterpart to SF Pro).
+ * If the user puts their own files in /sdcard/Glass/fonts/ (Regular, Medium, Semibold, Bold
+ * as .ttf or .otf), Glass uses them instead.
  */
 object Typo {
     var family: FontFamily = FontFamily.Default

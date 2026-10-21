@@ -19,20 +19,20 @@ import kotlin.math.roundToInt
 
 class AppVisual(
     val tile: ImageBitmap,
-    /** Version minuscule et floutée de la tuile : sert de « Top Shelf » coloré en plein écran. */
+    /** Tiny blurred copy of the tile, used as the full-screen colored "Top Shelf". */
     val ambience: ImageBitmap,
 )
 
 /**
- * Fabrique l'image d'une tuile au format tvOS (5:3) à partir des visuels de l'app elle-même :
- * 1. la bannière Android TV (le vrai logo rectangulaire de l'app), en pleine carte ;
- * 2. sinon, un logo sur fond uni : la carte prend ce fond et le logo est posé au centre ;
- * 3. sinon (fond travaillé ou transparent) : logo de l'app et son nom sur carte blanche, comme une bannière TV.
+ * Builds a tvOS-format (5:3) tile image from the app's own artwork:
+ * 1. the Android TV banner (the app's real rectangular logo), filling the card;
+ * 2. otherwise, a logo on a flat background: the card takes that color and the logo sits in the middle;
+ * 3. otherwise (detailed or transparent background): the app's logo and name on a white card, like a TV banner.
  */
 class TileFactory(context: Context) {
     private val pm: PackageManager = context.packageManager
 
-    /** Google Sans Flex (licence OFL, fournie par Google) : la typo des logotypes Google comme Chrome. */
+    /** Google Sans Flex (OFL, published by Google): the typeface of Google wordmarks such as Chrome. */
     private val wordmarkFont: Typeface = runCatching {
         Typeface.createFromAsset(context.assets, "fonts/GoogleSansFlex-Regular.ttf")
     }.getOrDefault(Typeface.create("sans-serif", Typeface.NORMAL))
@@ -40,7 +40,7 @@ class TileFactory(context: Context) {
 
     fun build(e: AppEntry): AppVisual {
         val info = runCatching { pm.getActivityInfo(ComponentName(e.pkg, e.activity), 0) }.getOrNull()
-        // ComponentInfo.loadBanner retombe sur la bannière de l'application si l'activité n'en a pas.
+        // ComponentInfo.loadBanner falls back to the application banner when the activity has none.
         val banner = info?.loadBanner(pm)
         val icon = info?.loadIcon(pm) ?: pm.defaultActivityIcon
         val bmp = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
@@ -55,8 +55,8 @@ class TileFactory(context: Context) {
     }
 
     /**
-     * La bannière couvre toute la carte. Si son format s'éloigne trop du 16:9 (bannière presque carrée),
-     * elle est affichée entière sur la couleur de son bord plutôt que rognée.
+     * The banner covers the whole card. If its shape is far from 16:9 (an almost square banner),
+     * it is shown whole on its edge color instead of being cropped.
      */
     private fun drawBanner(c: Canvas, d: Drawable) {
         val iw = d.intrinsicWidth.takeIf { it > 0 } ?: W
@@ -79,11 +79,11 @@ class TileFactory(context: Context) {
         val fg = icon.foreground
         val solid = bg?.let { uniformColor(it) }
         if (solid == null || fg == null) {
-            // Fond travaillé (Chrome…) : comme une bannière Android TV, logo rond et nom sur carte blanche.
+            // Detailed background (Chrome…): like an Android TV banner, round logo and name on a white card.
             drawWordmark(c, icon, label)
             return
         }
-        // Logo sur fond uni : la carte prend ce fond, le logo reste à taille raisonnable au centre.
+        // Logo on a flat background: the card takes that color, the logo stays a sensible size in the middle.
         c.drawColor(solid)
         val size = (H * 1.12f).roundToInt()
         val left = (W - size) / 2
@@ -98,8 +98,8 @@ class TileFactory(context: Context) {
             drawWordmark(c, d, label)
             return
         }
-        // Icône pleine (logo sur fond de couleur) : la carte prolonge ce fond, l'icône est agrandie
-        // juste assez pour faire disparaître ses marges et ses coins arrondis.
+        // Full icon (logo on a colored background): the card extends that background, and the icon is
+        // scaled up just enough to hide its margins and rounded corners.
         fill(c, probe.edgeColor)
         val size = (H * 1.05f).roundToInt()
         val left = (W - size) / 2
@@ -108,7 +108,7 @@ class TileFactory(context: Context) {
         d.draw(c)
     }
 
-    /** Carte de style bannière TV : logo de l'app à gauche, son nom à droite, sur fond blanc (noir si logo clair). */
+    /** TV-banner-style card: app logo on the left, its name on the right, on white (dark if the logo is light). */
     private fun drawWordmark(c: Canvas, icon: Drawable, label: String) {
         val dark = sample(icon).logoLuminance > 0.8f
         c.drawColor(if (dark) 0xFF1C1C1E.toInt() else Color.WHITE)
@@ -129,7 +129,7 @@ class TileFactory(context: Context) {
         c.drawText(label, left + iconSize + gap, H / 2f - (fm.ascent + fm.descent) / 2f, paint)
     }
 
-    /** Couleur du calque si elle est uniforme (fond plat), sinon null. */
+    /** The layer's color if it is uniform (flat background), otherwise null. */
     private fun uniformColor(d: Drawable): Int? {
         val n = 24
         val bmp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
@@ -147,12 +147,12 @@ class TileFactory(context: Context) {
         return if (close > px.size * 0.92f) ref else null
     }
 
-    /** Aplat exactement de la couleur du bord de l'icône : la jonction icône / carte est invisible. */
+    /** Flat fill in exactly the icon's edge color, so the icon/card seam is invisible. */
     private fun fill(c: Canvas, color: Int) = c.drawColor(color)
 
     private class Probe(val edgeOpaque: Boolean, val edgeColor: Int, val logoLuminance: Float)
 
-    /** Analyse l'icône : son pourtour est-il opaque, de quelle couleur, et le logo est-il clair ? */
+    /** Inspects the icon: is its edge opaque, what color is it, and is the logo light? */
     private fun sample(d: Drawable): Probe {
         val n = 96
         val bmp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
@@ -160,7 +160,7 @@ class TileFactory(context: Context) {
         d.draw(Canvas(bmp))
         val px = IntArray(n * n)
         bmp.getPixels(px, 0, n, 0, 0, n, n)
-        // Anneau à 14 % du bord : à l'intérieur des coins arrondis et des marges usuelles.
+        // Ring 14% in from the edge: inside rounded corners and the usual margins.
         val inset = (n * 0.14f).toInt()
         var opaque = 0
         var total = 0
@@ -184,7 +184,7 @@ class TileFactory(context: Context) {
     }
 
     companion object {
-        /** Taille de rendu des tuiles en pixels : couvre la tuile agrandie au focus sur un écran 1080p. */
+        /** Tile render size in pixels: enough for the focus-zoomed tile on a 1080p screen. */
         const val W = 360
         const val H = 216
     }

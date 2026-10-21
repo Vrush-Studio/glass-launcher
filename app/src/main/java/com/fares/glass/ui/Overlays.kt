@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.Image
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fares.glass.R
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -53,20 +56,21 @@ import java.util.Locale
 
 class ControlItem(val icon: ImageVector, val title: String, val subtitle: String?)
 
+@Composable
 fun menuItems() = listOf(
-    ControlItem(Icons.Rounded.OpenWith, "Déplacer", null),
-    ControlItem(Icons.Rounded.VisibilityOff, "Masquer", null),
-    ControlItem(Icons.Rounded.Info, "Infos sur l'app", null),
+    ControlItem(Icons.Rounded.OpenWith, stringResource(R.string.menu_move), null),
+    ControlItem(Icons.Rounded.VisibilityOff, stringResource(R.string.menu_hide), null),
+    ControlItem(Icons.Rounded.Info, stringResource(R.string.menu_info), null),
 )
 
-/** Style de texte dans la police de l'interface (Inter, ou celle fournie dans /sdcard/Glass/fonts). */
+/** Text style in the UI font (Inter, or the one supplied in /sdcard/Glass/fonts). */
 fun txt(color: Color, size: TextUnit, weight: FontWeight = FontWeight.Normal) =
     TextStyle(color = color, fontSize = size, fontWeight = weight, fontFamily = Typo.family)
 
 private val white = Color.White
 private val ink = Color(0xFF111114)
 
-/** Bouton tvOS : translucide au repos, plateau blanc lumineux avec texte sombre au focus. */
+/** tvOS button: translucent at rest, a bright white plate with dark text when focused. */
 @Composable
 private fun GlassButton(item: ControlItem, focused: Boolean, modifier: Modifier) {
     val f by animateFloatAsState(if (focused) 1f else 0f, spring(stiffness = 600f), label = "btn")
@@ -117,7 +121,7 @@ fun HintPill(backdrop: Backdrop, text: String, modifier: Modifier) {
 
 private fun lerpColor(a: Color, b: Color, t: Float) = androidx.compose.ui.graphics.lerp(a, b, t)
 
-/** Heure courante, rafraîchie chaque seconde tant que l'élément est affiché. */
+/** Current time, refreshed every second while the element is shown. */
 @Composable
 fun rememberNow(): Long {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -132,17 +136,31 @@ fun rememberNow(): Long {
 
 private val headerShadow = androidx.compose.ui.graphics.Shadow(Color.Black.copy(alpha = 0.45f), androidx.compose.ui.geometry.Offset(0f, 3f), 18f)
 
-/** En-tête de l'accueil : salutation, grande heure et date, comme sur l'écran de référence. */
+/** Time and date in the device's language and 12/24-hour setting, recomputed every minute. */
+@Composable
+fun rememberClock(now: Long): Pair<String, String> {
+    val context = LocalContext.current
+    val locale = Locale.getDefault()
+    return remember(now / 60000, locale) {
+        val h24 = android.text.format.DateFormat.is24HourFormat(context)
+        val time = SimpleDateFormat(if (h24) "HH:mm" else "h:mm", locale).format(Date(now))
+        val pattern = android.text.format.DateFormat.getBestDateTimePattern(locale, "EEEEMMMMd")
+        time to SimpleDateFormat(pattern, locale).format(Date(now)).replaceFirstChar { it.titlecase(locale) }
+    }
+}
+
+/** Home header: greeting, large time and date. */
 @Composable
 fun HomeHeader(name: String, modifier: Modifier) {
     val now = rememberNow()
-    val minute = now / 60000
-    val hour = remember(minute) { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
-    val greeting = (if (hour in 5..17) "Bonjour" else "Bonsoir") + if (name.isBlank()) "" else " $name"
-    val time = remember(minute) { SimpleDateFormat("HH:mm", Locale.FRANCE).format(Date(now)) }
-    val date = remember(minute) {
-        SimpleDateFormat("EEEE d MMMM", Locale.FRANCE).format(Date(now)).replaceFirstChar { it.titlecase(Locale.FRANCE) }
+    val hour = remember(now / 60000) { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
+    val (plain, named) = when (hour) {
+        in 5..11 -> R.string.greeting_morning to R.string.greeting_morning_name
+        in 12..17 -> R.string.greeting_afternoon to R.string.greeting_afternoon_name
+        else -> R.string.greeting_evening to R.string.greeting_evening_name
     }
+    val greeting = if (name.isBlank()) stringResource(plain) else stringResource(named, name)
+    val (time, date) = rememberClock(now)
     Column(modifier) {
         BasicText(greeting, style = txt(white, 17.sp, FontWeight.SemiBold).copy(shadow = headerShadow))
         BasicText(time, style = txt(white, 64.sp, FontWeight.Bold).copy(shadow = headerShadow, letterSpacing = (-1).sp))
@@ -150,13 +168,14 @@ fun HomeHeader(name: String, modifier: Modifier) {
     }
 }
 
+@Composable
 fun topItems() = listOf(
     ControlItem(Icons.Rounded.Wifi, "Wi-Fi", null),
     ControlItem(Icons.Rounded.Bluetooth, "Bluetooth", null),
-    ControlItem(Icons.Rounded.Settings, "Réglages", null),
+    ControlItem(Icons.Rounded.Settings, stringResource(R.string.top_settings), null),
 )
 
-/** Boutons en haut à droite : pastilles Liquid Glass, plateau blanc au focus. */
+/** Top-right buttons: Liquid Glass pills with a white plate when focused. */
 @Composable
 fun TopBar(backdrop: Backdrop, items: List<ControlItem>, focus: Int, modifier: Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

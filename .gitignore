@@ -9,11 +9,11 @@ captures/
 .externalNativeBuild/
 .cxx/
 
-# Sorties
+# Build outputs
 *.apk
 *.aab
 
-# Clés de signature
+# Signing keys
 *.jks
 *.keystore
 keystore.properties

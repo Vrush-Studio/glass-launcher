@@ -13,13 +13,13 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * Flou gaussien logiciel. RenderEffect n'existe qu'à partir d'Android 12 et le GPU du stick est
- * faible : on floute une fois, sur une image réduite, et on réutilise le résultat.
- * Trois flous « boîte » successifs donnent une très bonne approximation d'une gaussienne.
+ * Software Gaussian blur. RenderEffect only exists from Android 12 and TV stick GPUs are weak,
+ * so the image is blurred once, at reduced size, and the result is reused.
+ * Three successive box blurs approximate a Gaussian very closely.
  */
 object Blur {
 
-    /** Réduit [src] à [targetWidth] px de large, sature les couleurs (effet « vibrancy ») et floute. */
+    /** Scales [src] down to [targetWidth] px wide, boosts saturation ("vibrancy") and blurs. */
     fun frosted(src: Bitmap, targetWidth: Int, sigma: Float, saturation: Float, brightness: Float): Bitmap {
         val tw = targetWidth
         val th = max(1, (src.height * tw.toFloat() / src.width).roundToInt())
@@ -55,7 +55,7 @@ object Blur {
         return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
     }
 
-    /** Tailles des trois boîtes dont la composition approche une gaussienne d'écart-type [sigma]. */
+    /** Sizes of the three boxes whose composition approximates a Gaussian with standard deviation [sigma]. */
     private fun boxesForGauss(sigma: Float, n: Int): IntArray {
         val wIdeal = sqrt(12.0 * sigma * sigma / n + 1)
         var wl = floor(wIdeal).toInt()
