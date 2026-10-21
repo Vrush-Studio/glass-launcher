@@ -1,0 +1,94 @@
+package com.fares.glass.ui
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
+
+/** Ce qui se trouve derrière le verre : le fond d'écran déjà flouté, et la taille de l'écran. */
+class Backdrop {
+    var frosted by mutableStateOf<ImageBitmap?>(null)
+    var screen by mutableStateOf(IntSize.Zero)
+}
+
+/**
+ * Matériau « Liquid Glass ». Le fond est fixe, donc au lieu de flouter en temps réel (impossible
+ * avant Android 12), on dessine la portion exacte du fond pré-flouté qui se trouve sous le panneau,
+ * puis une teinte, un reflet spéculaire en haut, une lueur intérieure et un liseré lumineux.
+ */
+@Composable
+fun Glass(
+    backdrop: Backdrop,
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(30.dp),
+    tint: Color = Color.White.copy(alpha = 0.07f),
+    /** Fond flouté à échantillonner, s'il diffère du fond d'écran (ambiance du Top Shelf). */
+    source: ImageBitmap? = null,
+    content: @Composable BoxScope.() -> Unit = {},
+) {
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    Box(
+        modifier
+            .onGloballyPositioned { origin = it.positionInRoot() }
+            .drawWithCache {
+                val path = Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@drawWithCache)) }
+                val rim = Brush.linearGradient(
+                    0f to Color.White.copy(alpha = 0.65f),
+                    0.35f to Color.White.copy(alpha = 0.10f),
+                    0.7f to Color.White.copy(alpha = 0.06f),
+                    1f to Color.White.copy(alpha = 0.35f),
+                    start = Offset.Zero, end = Offset(size.width, size.height),
+                )
+                val specular = Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = 0.16f),
+                    0.4f to Color.White.copy(alpha = 0.03f),
+                    1f to Color.Transparent,
+                )
+                val innerGlow = Brush.radialGradient(
+                    listOf(Color.Transparent, Color.White.copy(alpha = 0.06f)),
+                    center = Offset(size.width / 2, size.height / 2),
+                    radius = maxOf(size.width, size.height) * 0.75f,
+                )
+                val rimWidth = 1.2.dp.toPx()
+                onDrawBehind {
+                    clipPath(path) {
+                        (source ?: backdrop.frosted)?.let { img ->
+                            drawImage(
+                                img,
+                                dstOffset = IntOffset(-origin.x.roundToInt(), -origin.y.roundToInt()),
+                                dstSize = backdrop.screen,
+                                filterQuality = FilterQuality.Low,
+                            )
+                        }
+                        drawRect(tint)
+                        drawRect(innerGlow)
+                        drawRect(specular)
+                    }
+                    drawPath(path, rim, style = Stroke(rimWidth))
+                }
+            },
+        content = content,
+    )
+}
