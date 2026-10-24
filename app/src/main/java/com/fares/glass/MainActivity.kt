@@ -1,5 +1,6 @@
 package com.fares.glass
 
+import android.view.KeyEvent
 import android.app.ActivityOptions
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -26,6 +27,7 @@ import com.fares.glass.ui.Command
 import com.fares.glass.ui.HomeScreen
 import com.fares.glass.ui.HomeState
 import com.fares.glass.ui.Typo
+import com.fares.glass.ui.CcPage
 import com.fares.glass.ui.ControlCenter
 import com.fares.glass.ui.Mode
 import com.fares.glass.sys.BluetoothController
@@ -107,12 +109,14 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_SETTINGS) {
-            if (home.mode == Mode.Control) cc.close() else cc.open()
-            return true
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            if (event.keyCode == KeyEvent.KEYCODE_MENU || event.keyCode == KeyEvent.KEYCODE_SETTINGS) {
+                if (home.mode == Mode.Control) cc.close() else cc.open(CcPage.Main)
+                return true
+            }
         }
-        return super.onKeyDown(keyCode, event)
+        return super.dispatchKeyEvent(event)
     }
 
     private fun loadWallpaper() {
