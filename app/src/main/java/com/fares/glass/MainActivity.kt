@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -39,7 +40,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 
 class MainActivity : ComponentActivity() {
 
@@ -65,9 +65,6 @@ class MainActivity : ComponentActivity() {
         repo = AppRepository(this)
         Typo.load(this)
         intent.getStringExtra("name")?.let(repo::setName)
-        
-        // Salin wallpaper dari cache/assets internal jika belum ada di filesDir
-        copyInternalWallpaper()
 
         cc = ControlCenter(
             this, repo, WifiController(this), BluetoothController(this), SystemInfo(this), SettingsShortcuts(this),
@@ -91,21 +88,6 @@ class MainActivity : ComponentActivity() {
             )
         }
         loadWallpaper()
-    }
-
-    private fun copyInternalWallpaper() {
-        val dest = File(filesDir, "wallpaper.jpg")
-        if (!dest.exists()) {
-            try {
-                // Cek apakah ada file wallpaper di /sdcard/Glass/wallpaper.jpg
-                val src = File(Environment.getExternalStorageDirectory(), "Glass/wallpaper.jpg")
-                if (src.canRead()) {
-                    src.copyTo(dest, overwrite = true)
-                }
-            } catch (e: Exception) {
-                // Fallback aman
-            }
-        }
     }
 
     override fun onResume() {
