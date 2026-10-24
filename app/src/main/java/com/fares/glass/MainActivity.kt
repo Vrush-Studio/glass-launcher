@@ -1,6 +1,5 @@
 package com.fares.glass
 
-import android.view.KeyEvent
 import android.app.ActivityOptions
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -9,7 +8,6 @@ import android.content.IntentFilter
 import android.graphics.Rect
 import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -28,7 +26,6 @@ import com.fares.glass.ui.Command
 import com.fares.glass.ui.HomeScreen
 import com.fares.glass.ui.HomeState
 import com.fares.glass.ui.Typo
-import com.fares.glass.ui.CcPage
 import com.fares.glass.ui.ControlCenter
 import com.fares.glass.ui.Mode
 import com.fares.glass.sys.BluetoothController
@@ -39,7 +36,6 @@ import com.fares.glass.sys.WifiController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 class MainActivity : ComponentActivity() {
 
@@ -65,7 +61,6 @@ class MainActivity : ComponentActivity() {
         repo = AppRepository(this)
         Typo.load(this)
         intent.getStringExtra("name")?.let(repo::setName)
-
         cc = ControlCenter(
             this, repo, WifiController(this), BluetoothController(this), SystemInfo(this), SettingsShortcuts(this),
             onOpen = ::startSafely,
@@ -73,6 +68,7 @@ class MainActivity : ComponentActivity() {
             onNextWallpaper = { run(Command.NextWallpaper) },
             onClose = { home.mode = Mode.Browse },
         )
+        // A home screen never closes on Back.
         onBackPressedDispatcher.addCallback(this) {}
         registerReceiver(packages, IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -111,21 +107,12 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            if (event.keyCode == KeyEvent.KEYCODE_MENU || event.keyCode == KeyEvent.KEYCODE_SETTINGS) {
-                if (home.mode == Mode.Control) cc.close() else cc.open(CcPage.Main)
-                return true
-            }
-        }
-        return super.dispatchKeyEvent(event)
-    }
-
     private fun loadWallpaper() {
-        val index = 0
+        val index = repo.wallpaperIndex % Wallpapers.count(this)
         lifecycleScope.launch {
             val (sharp, frosted) = withContext(Dispatchers.Default) {
                 val src = Wallpapers.load(this@MainActivity, index)
+                // ~480 px wide with sigma 10: like a 40 px blur at 1080p, and very cheap.
                 src to Blur.frosted(src, 480, 10f, 1.45f, 1.0f)
             }
             wallpaper.value = sharp.asImageBitmap()
@@ -134,28 +121,38 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun launch(entry: AppEntry, bounds: Rect?) {
+    private fun launch(entry: AppEntry, from: Rect) {
+        val options = ActivityOptions.makeScaleUpAnimation(window.decorView, from.left, from.top, from.width(), from.height())
         try {
-            val intent = packageManager.getLaunchIntentForPackage(entry.packageName) ?: return
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            val opts = bounds?.let { ActivityOptions.makeScaleUpAnimation(window.decorView, it.left, it.top, it.width(), it.height()) }
-            startActivity(intent, opts?.toBundle())
+            startActivity(entry.launchIntent(), options.toBundle())
         } catch (e: Exception) {
-            Log.e("Glass", "Failed to launch ${entry.packageName}", e)
+            Log.w("Glass", "Can't launch ${entry.pkg}", e)
+            packageManager.getLaunchIntentForPackage(entry.pkg)?.let { startSafely(it) }
+        }
+    }
+
+    private fun run(command: Command) {
+        when (command) {
+            Command.Settings -> startSafely(Intent(Settings.ACTION_SETTINGS))
+            Command.Network -> startSafely(Intent(Settings.ACTION_WIFI_SETTINGS))
+            Command.Bluetooth -> startSafely(Intent("android.settings.CONTROLLERS_SETTINGS"))
+            Command.Apps -> startSafely(Intent(Settings.ACTION_APPLICATION_SETTINGS))
+            is Command.AppInfo -> startSafely(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", command.pkg, null)),
+            )
+            Command.NextWallpaper -> {
+                repo.setWallpaper((repo.wallpaperIndex + 1) % Wallpapers.count(this))
+                loadWallpaper()
+            }
         }
     }
 
     private fun startSafely(intent: Intent) {
         try {
-            startActivity(intent)
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: Exception) {
-            Log.e("Glass", "Failed to start intent", e)
-        }
-    }
-
-    private fun run(cmd: Command) {
-        when (cmd) {
-            is Command.NextWallpaper -> loadWallpaper()
+            Log.w("Glass", "No activity for $intent", e)
+            if (intent.action != Settings.ACTION_SETTINGS) startSafely(Intent(Settings.ACTION_SETTINGS))
         }
     }
 }
