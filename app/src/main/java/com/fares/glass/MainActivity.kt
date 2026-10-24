@@ -107,6 +107,14 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_SETTINGS) {
+            if (home.mode == Mode.Control) cc.close() else cc.open()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     private fun loadWallpaper() {
         val index = repo.wallpaperIndex % Wallpapers.count(this)
         lifecycleScope.launch {
