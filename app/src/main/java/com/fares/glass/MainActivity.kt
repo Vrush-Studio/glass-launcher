@@ -38,6 +38,8 @@ import com.fares.glass.sys.WifiController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity : ComponentActivity() {
 
@@ -63,6 +65,10 @@ class MainActivity : ComponentActivity() {
         repo = AppRepository(this)
         Typo.load(this)
         intent.getStringExtra("name")?.let(repo::setName)
+        
+        // Salin wallpaper dari cache/assets internal jika belum ada di filesDir
+        copyInternalWallpaper()
+
         cc = ControlCenter(
             this, repo, WifiController(this), BluetoothController(this), SystemInfo(this), SettingsShortcuts(this),
             onOpen = ::startSafely,
@@ -70,7 +76,6 @@ class MainActivity : ComponentActivity() {
             onNextWallpaper = { run(Command.NextWallpaper) },
             onClose = { home.mode = Mode.Browse },
         )
-        // A home screen never closes on Back.
         onBackPressedDispatcher.addCallback(this) {}
         registerReceiver(packages, IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -86,6 +91,21 @@ class MainActivity : ComponentActivity() {
             )
         }
         loadWallpaper()
+    }
+
+    private fun copyInternalWallpaper() {
+        val dest = File(filesDir, "wallpaper.jpg")
+        if (!dest.exists()) {
+            try {
+                // Cek apakah ada file wallpaper di /sdcard/Glass/wallpaper.jpg
+                val src = File(Environment.getExternalStorageDirectory(), "Glass/wallpaper.jpg")
+                if (src.canRead()) {
+                    src.copyTo(dest, overwrite = true)
+                }
+            } catch (e: Exception) {
+                // Fallback aman
+            }
+        }
     }
 
     override fun onResume() {
@@ -120,11 +140,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadWallpaper() {
-        val index = repo.wallpaperIndex % Wallpapers.count(this)
+        val index = 0
         lifecycleScope.launch {
             val (sharp, frosted) = withContext(Dispatchers.Default) {
                 val src = Wallpapers.load(this@MainActivity, index)
-                // ~480 px wide with sigma 10: like a 40 px blur at 1080p, and very cheap.
                 src to Blur.frosted(src, 480, 10f, 1.45f, 1.0f)
             }
             wallpaper.value = sharp.asImageBitmap()
@@ -133,38 +152,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun launch(entry: AppEntry, from: Rect) {
-        val options = ActivityOptions.makeScaleUpAnimation(window.decorView, from.left, from.top, from.width(), from.height())
+    private fun launch(entry: AppEntry, bounds: Rect?) {
         try {
-            startActivity(entry.launchIntent(), options.toBundle())
+            val intent = packageManager.getLaunchIntentForPackage(entry.packageName) ?: return
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val opts = bounds?.let { ActivityOptions.makeScaleUpAnimation(window.decorView, it.left, it.top, it.width(), it.height()) }
+            startActivity(intent, opts?.toBundle())
         } catch (e: Exception) {
-            Log.w("Glass", "Can't launch ${entry.pkg}", e)
-            packageManager.getLaunchIntentForPackage(entry.pkg)?.let { startSafely(it) }
-        }
-    }
-
-    private fun run(command: Command) {
-        when (command) {
-            Command.Settings -> startSafely(Intent(Settings.ACTION_SETTINGS))
-            Command.Network -> startSafely(Intent(Settings.ACTION_WIFI_SETTINGS))
-            Command.Bluetooth -> startSafely(Intent("android.settings.CONTROLLERS_SETTINGS"))
-            Command.Apps -> startSafely(Intent(Settings.ACTION_APPLICATION_SETTINGS))
-            is Command.AppInfo -> startSafely(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", command.pkg, null)),
-            )
-            Command.NextWallpaper -> {
-                repo.setWallpaper((repo.wallpaperIndex + 1) % Wallpapers.count(this))
-                loadWallpaper()
-            }
+            Log.e("Glass", "Failed to launch ${entry.packageName}", e)
         }
     }
 
     private fun startSafely(intent: Intent) {
         try {
-            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(intent)
         } catch (e: Exception) {
-            Log.w("Glass", "No activity for $intent", e)
-            if (intent.action != Settings.ACTION_SETTINGS) startSafely(Intent(Settings.ACTION_SETTINGS))
+            Log.e("Glass", "Failed to start intent", e)
+        }
+    }
+
+    private fun run(cmd: Command) {
+        when (cmd) {
+            is Command.NextWallpaper -> loadWallpaper()
         }
     }
 }
